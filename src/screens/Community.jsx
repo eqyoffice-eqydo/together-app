@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getGroupMessages, sendMessage, subscribeToMessages, getGroupProjects, getGroupEvents, createProject, createEvent, getProjectMemberships, joinProject, leaveProject } from "../lib/db";
+import { getGroupMessages, sendMessage, subscribeToMessages, getGroupProjects, getGroupEvents, createProject, createEvent, getProjectMemberships, getProjectMembers, joinProject, leaveProject } from "../lib/db";
 
 function getInitials(name) {
   if (!name) return "?";
@@ -121,24 +121,13 @@ function ProjectDetailModal({ project, user, onClose, onMembershipChange }) {
   const [acting, setActing] = useState(false);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const { data } = await import("../lib/supabase").then(({ supabase }) =>
-          supabase
-            .from("project_members")
-            .select("project_id, user_id, profiles(display_name)")
-            .eq("project_id", project.id)
-        );
-        const m = data || [];
+    getProjectMembers(project.id)
+      .then((m) => {
         setMembers(m);
         setIsMember(m.some((pm) => pm.user_id === user?.id));
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [project.id, user?.id]);
 
   async function handleJoin() {

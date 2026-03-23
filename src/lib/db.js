@@ -177,6 +177,15 @@ export async function getProjectMemberships(projectIds) {
   return map
 }
 
+export async function getProjectMembers(projectId) {
+  const { data, error } = await supabase
+    .from('project_members')
+    .select('project_id, user_id, profiles(display_name)')
+    .eq('project_id', projectId)
+  if (error) throw error
+  return data || []
+}
+
 export async function joinProject(projectId, userId) {
   const { error } = await supabase
     .from('project_members')
