@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getGroupMessages, sendMessage, subscribeToMessages, getGroupProjects, getGroupEvents, createProject, createEvent } from "../lib/db";
+import { getGroupMessages, sendMessage, subscribeToMessages, getGroupProjects, getGroupEvents, createProject, createEvent, getProjectMemberships, joinProject, leaveProject } from "../lib/db";
 
 function getInitials(name) {
   if (!name) return "?";
@@ -18,15 +18,14 @@ function formatEventDate(dateStr) {
   return {
     day: d.toLocaleDateString("en", { weekday: "short" }).toUpperCase(),
     date: d.getDate(),
-    month: d.toLocaleDateString("en", { month: "short" }),
     time: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
   };
 }
 
-// Modal simplu pentru creare proiect
 function NewProjectModal({ onSave, onClose }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [neededHelp, setNeededHelp] = useState("");
   const [status, setStatus] = useState("planning");
 
   return (
@@ -47,6 +46,13 @@ function NewProjectModal({ onSave, onClose }) {
           rows={3}
           className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400 resize-none"
         />
+        <input
+          type="text"
+          placeholder="What kind of help do you need? (optional)"
+          value={neededHelp}
+          onChange={(e) => setNeededHelp(e.target.value)}
+          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400"
+        />
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -58,7 +64,7 @@ function NewProjectModal({ onSave, onClose }) {
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-500 text-sm py-3 rounded-xl hover:border-gray-400 transition-all">Cancel</button>
           <button
-            onClick={() => title.trim() && onSave({ title: title.trim(), description: description.trim(), status })}
+            onClick={() => title.trim() && onSave({ title: title.trim(), description: description.trim(), needed_help: neededHelp.trim(), status })}
             disabled={!title.trim()}
             className="flex-1 bg-gray-900 text-white text-sm py-3 rounded-xl disabled:opacity-30 hover:bg-gray-700 transition-all"
           >
@@ -70,7 +76,6 @@ function NewProjectModal({ onSave, onClose }) {
   );
 }
 
-// Modal pentru creare eveniment
 function NewEventModal({ onSave, onClose }) {
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
@@ -87,44 +92,156 @@ function NewEventModal({ onSave, onClose }) {
     <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50 px-4 pb-8">
       <div className="bg-white rounded-2xl w-full max-w-md p-6 flex flex-col gap-4">
         <h2 className="text-lg font-bold text-gray-900">New Event</h2>
-        <input
-          type="text"
-          placeholder="Event title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400"
-        />
-        <input
-          type="text"
-          placeholder="Location (optional)"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400"
-        />
+        <input type="text" placeholder="Event title" value={title} onChange={(e) => setTitle(e.target.value)}
+          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400" />
+        <input type="text" placeholder="Location (optional)" value={location} onChange={(e) => setLocation(e.target.value)}
+          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400" />
         <div className="flex gap-3">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-gray-400"
-          />
-          <input
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-gray-400"
-          />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+            className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-gray-400" />
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
+            className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-gray-400" />
         </div>
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-500 text-sm py-3 rounded-xl hover:border-gray-400 transition-all">Cancel</button>
-          <button
-            onClick={handleSave}
-            disabled={!title.trim() || !date || !time}
-            className="flex-1 bg-gray-900 text-white text-sm py-3 rounded-xl disabled:opacity-30 hover:bg-gray-700 transition-all"
-          >
+          <button onClick={handleSave} disabled={!title.trim() || !date || !time}
+            className="flex-1 bg-gray-900 text-white text-sm py-3 rounded-xl disabled:opacity-30 hover:bg-gray-700 transition-all">
             Create
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectDetailModal({ project, user, onClose, onMembershipChange }) {
+  const [members, setMembers] = useState([]);
+  const [isMember, setIsMember] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const { data } = await import("../lib/supabase").then(({ supabase }) =>
+          supabase
+            .from("project_members")
+            .select("project_id, user_id, profiles(display_name)")
+            .eq("project_id", project.id)
+        );
+        const m = data || [];
+        setMembers(m);
+        setIsMember(m.some((pm) => pm.user_id === user?.id));
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [project.id, user?.id]);
+
+  async function handleJoin() {
+    if (!user?.id || acting) return;
+    setActing(true);
+    try {
+      await joinProject(project.id, user.id);
+      setMembers((prev) => [...prev, { user_id: user.id, profiles: { display_name: null } }]);
+      setIsMember(true);
+      onMembershipChange();
+    } catch (err) { console.error(err); }
+    finally { setActing(false); }
+  }
+
+  async function handleLeave() {
+    if (!user?.id || acting) return;
+    setActing(true);
+    try {
+      await leaveProject(project.id, user.id);
+      setMembers((prev) => prev.filter((m) => m.user_id !== user.id));
+      setIsMember(false);
+      onMembershipChange();
+    } catch (err) { console.error(err); }
+    finally { setActing(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50 px-4 pb-8">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6 flex flex-col gap-5 max-h-[85vh] overflow-y-auto">
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">{project.title}</h2>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${project.status === "active" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>
+              {project.status === "active" ? "Active" : "Planning"}
+            </span>
+          </div>
+          <button onClick={onClose} className="text-gray-300 hover:text-gray-500 transition-colors flex-shrink-0 p-1">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Description */}
+        {project.description && (
+          <p className="text-gray-600 text-sm leading-relaxed">{project.description}</p>
+        )}
+
+        {/* Needed help */}
+        {project.needed_help && (
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+            <p className="text-xs font-medium text-amber-600 uppercase tracking-wider mb-1">Help needed</p>
+            <p className="text-sm text-amber-800 leading-relaxed">{project.needed_help}</p>
+          </div>
+        )}
+
+        {/* Members */}
+        <div>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
+            {loading ? "Loading..." : `${members.length} ${members.length === 1 ? "person" : "people"} involved`}
+          </p>
+          {!loading && members.length === 0 && (
+            <p className="text-gray-400 text-sm">No one yet. Be the first.</p>
+          )}
+          {!loading && members.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {members.map((m, i) => (
+                <div key={m.user_id || i} className="flex items-center gap-1.5 bg-gray-50 rounded-full pl-1 pr-3 py-1">
+                  <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600 font-medium">
+                    {getInitials(m.profiles?.display_name)}
+                  </div>
+                  <span className="text-xs text-gray-700">
+                    {m.profiles?.display_name?.split(" ")[0] || "Someone"}
+                    {m.user_id === user?.id ? " (you)" : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Action button */}
+        {user && (
+          isMember ? (
+            <button
+              onClick={handleLeave}
+              disabled={acting}
+              className="w-full border border-gray-200 text-gray-500 text-sm py-3 rounded-xl hover:border-gray-400 transition-all disabled:opacity-40"
+            >
+              {acting ? "..." : "Leave project"}
+            </button>
+          ) : (
+            <button
+              onClick={handleJoin}
+              disabled={acting}
+              className="w-full bg-gray-900 text-white text-sm font-medium py-3.5 rounded-xl hover:bg-gray-700 transition-all disabled:opacity-40"
+            >
+              {acting ? "Joining..." : "I'm in"}
+            </button>
+          )
+        )}
       </div>
     </div>
   );
@@ -134,12 +251,22 @@ export default function Community({ group, user, onNext }) {
   const [messages, setMessages] = useState([]);
   const [projects, setProjects] = useState([]);
   const [events, setEvents] = useState([]);
+  const [projectMembers, setProjectMembers] = useState({});
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showNewEvent, setShowNewEvent] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
   const bottomRef = useRef(null);
+
+  async function loadProjectMembers(projs) {
+    if (!projs.length) return;
+    try {
+      const map = await getProjectMemberships(projs.map((p) => p.id));
+      setProjectMembers(map);
+    } catch (err) { console.error(err); }
+  }
 
   useEffect(() => {
     if (!group?.id) { setLoading(false); return; }
@@ -152,6 +279,7 @@ export default function Community({ group, user, onNext }) {
       setMessages(msgs);
       setProjects(projs);
       setEvents(evts);
+      loadProjectMembers(projs);
     }).catch(console.error).finally(() => setLoading(false));
 
     const channel = subscribeToMessages(group.id, (newMsg) => {
@@ -198,6 +326,10 @@ export default function Community({ group, user, onNext }) {
     } catch (err) { console.error(err); }
   }
 
+  function refreshProjectMembers() {
+    loadProjectMembers(projects);
+  }
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
 
@@ -236,17 +368,35 @@ export default function Community({ group, user, onNext }) {
               </button>
             ) : (
               <div className="flex flex-col gap-3">
-                {projects.map((p) => (
-                  <div key={p.id} className="border border-gray-100 rounded-xl p-4">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <p className="text-gray-900 text-sm font-medium">{p.title}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${p.status === "active" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>
-                        {p.status === "active" ? "Active" : "Planning"}
-                      </span>
-                    </div>
-                    {p.description && <p className="text-gray-400 text-xs leading-relaxed">{p.description}</p>}
-                  </div>
-                ))}
+                {projects.map((p) => {
+                  const members = projectMembers[p.id] || [];
+                  const isJoined = members.some((m) => m.user_id === user?.id);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelectedProject(p)}
+                      className="border border-gray-100 rounded-xl p-4 text-left hover:border-gray-300 transition-all w-full"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="text-gray-900 text-sm font-medium">{p.title}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${p.status === "active" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>
+                          {p.status === "active" ? "Active" : "Planning"}
+                        </span>
+                      </div>
+                      {p.description && <p className="text-gray-400 text-xs leading-relaxed mb-2">{p.description}</p>}
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-gray-400 text-xs">
+                          {members.length > 0 ? `${members.length} involved` : "Be the first"}
+                        </span>
+                        {isJoined ? (
+                          <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">Joined</span>
+                        ) : (
+                          <span className="text-xs text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full">I'm in →</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -334,6 +484,14 @@ export default function Community({ group, user, onNext }) {
 
       {showNewProject && <NewProjectModal onSave={handleNewProject} onClose={() => setShowNewProject(false)} />}
       {showNewEvent && <NewEventModal onSave={handleNewEvent} onClose={() => setShowNewEvent(false)} />}
+      {selectedProject && (
+        <ProjectDetailModal
+          project={selectedProject}
+          user={user}
+          onClose={() => setSelectedProject(null)}
+          onMembershipChange={refreshProjectMembers}
+        />
+      )}
     </div>
   );
 }

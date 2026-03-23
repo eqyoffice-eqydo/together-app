@@ -88,6 +88,23 @@ function FeedItem({ item }) {
     );
   }
 
+  if (type === "project_join") {
+    const name = data.profiles?.display_name?.split(" ")[0] || "Someone";
+    return (
+      <div className="flex items-start gap-3 py-3.5 border-b border-gray-50 last:border-0">
+        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-500 font-medium flex-shrink-0">
+          {getInitials(data.profiles?.display_name)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-gray-800">
+            <span className="font-medium">{name}</span> joined <span className="font-medium">{data.projects?.title}</span>
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">{timeAgo(date)}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (type === "checkin") {
     const name = data.profiles?.display_name?.split(" ")[0] || "Someone";
     const statusText =

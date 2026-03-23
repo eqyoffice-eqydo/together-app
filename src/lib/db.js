@@ -145,21 +145,52 @@ export async function getUserGroup(userId) {
 export async function getGroupProjects(groupId) {
   const { data, error } = await supabase
     .from('projects')
-    .select('id, title, description, status, created_at, profiles(display_name)')
+    .select('id, title, description, needed_help, status, created_at, profiles(display_name)')
     .eq('group_id', groupId)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data || []
 }
 
-export async function createProject(groupId, userId, { title, description, status }) {
+export async function createProject(groupId, userId, { title, description, needed_help, status }) {
   const { data, error } = await supabase
     .from('projects')
-    .insert({ group_id: groupId, created_by: userId, title, description, status })
+    .insert({ group_id: groupId, created_by: userId, title, description, needed_help, status })
     .select()
     .single()
   if (error) throw error
   return data
+}
+
+export async function getProjectMemberships(projectIds) {
+  if (!projectIds.length) return {}
+  const { data, error } = await supabase
+    .from('project_members')
+    .select('project_id, user_id, profiles(display_name)')
+    .in('project_id', projectIds)
+  if (error) throw error
+  const map = {}
+  for (const m of data || []) {
+    if (!map[m.project_id]) map[m.project_id] = []
+    map[m.project_id].push(m)
+  }
+  return map
+}
+
+export async function joinProject(projectId, userId) {
+  const { error } = await supabase
+    .from('project_members')
+    .insert({ project_id: projectId, user_id: userId })
+  if (error && error.code !== '23505') throw error
+}
+
+export async function leaveProject(projectId, userId) {
+  const { error } = await supabase
+    .from('project_members')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+  if (error) throw error
 }
 
 export async function getGroupEvents(groupId) {
@@ -302,6 +333,17 @@ export async function getGroupFeed(groupId) {
       : Promise.resolve({ data: [] }),
   ])
 
+  const projectIds = (projectsRes.data || []).map((p) => p.id)
+  const projectJoinsRes = projectIds.length > 0
+    ? await supabase
+        .from('project_members')
+        .select('project_id, user_id, joined_at, profiles(display_name), projects(title)')
+        .in('project_id', projectIds)
+        .gte('joined_at', since.toISOString())
+        .order('joined_at', { ascending: false })
+        .limit(10)
+    : { data: [] }
+
   const items = []
   for (const m of membersRes.data || [])
     items.push({ type: 'member', date: m.joined_at, data: m })
@@ -311,6 +353,8 @@ export async function getGroupFeed(groupId) {
     items.push({ type: 'event', date: e.event_date, data: e })
   for (const c of checkinsRes.data || [])
     items.push({ type: 'checkin', date: c.created_at, data: c })
+  for (const pj of projectJoinsRes.data || [])
+    items.push({ type: 'project_join', date: pj.joined_at, data: pj })
 
   return items.sort((a, b) => new Date(b.date) - new Date(a.date))
 }
