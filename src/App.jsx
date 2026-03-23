@@ -8,6 +8,7 @@ import Commitment from "./screens/Commitment";
 import Connect from "./screens/Connect";
 import Community from "./screens/Community";
 import Share from "./screens/Share";
+import Home from "./screens/Home";
 
 const SCREENS = ["welcome", "questions", "calltoaction", "connect", "community", "share"];
 
@@ -26,7 +27,7 @@ export default function App() {
       if (u) {
         const g = await getUserGroup(u.id).catch(() => null);
         setGroup(g);
-        setScreen("connect"); // Deja logat — sari direct la app
+        setScreen("home"); // Deja logat — sari direct la app
       }
       setAuthChecked(true);
     }
@@ -105,7 +106,7 @@ export default function App() {
       // Continua fara locatie
     }
 
-    setScreen("connect");
+    setScreen("home");
   }
 
   async function handleLogout() {
@@ -124,7 +125,7 @@ export default function App() {
     );
   }
 
-  const showBottomNav = ["connect", "community", "share"].includes(screen);
+  const showBottomNav = ["home", "connect", "community", "share"].includes(screen);
 
   return (
     <div className="min-h-dvh bg-white flex flex-col w-full max-w-md mx-auto relative overflow-x-hidden">
@@ -144,6 +145,7 @@ export default function App() {
         {screen === "calltoaction" && <CallToAction onNext={handleCallToActionNext} />}
         {screen === "commitment" && <Commitment onNext={handleCommitmentNext} onSkip={() => handleCommitmentNext("")} />}
         {screen === "auth" && <Auth onAuth={handleAuth} />}
+        {screen === "home" && <Home user={user} group={group} onGoToShare={() => goTo("share")} />}
         {screen === "connect" && <Connect onNext={goNext} user={user} />}
         {screen === "community" && <Community onNext={goNext} group={group} user={user} />}
         {screen === "share" && <Share onNext={() => goTo("connect")} user={user} />}
@@ -151,6 +153,16 @@ export default function App() {
 
       {showBottomNav && (
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur border-t border-gray-100 px-6 py-3 flex justify-around z-50">
+          <button
+            onClick={() => goTo("home")}
+            className={`flex flex-col items-center gap-1 px-4 py-1 transition-all ${screen === "home" ? "text-gray-900" : "text-gray-300"}`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            <span className="text-xs font-medium">Home</span>
+          </button>
+
           <button
             onClick={() => goTo("connect")}
             className={`flex flex-col items-center gap-1 px-4 py-1 transition-all ${screen === "connect" ? "text-gray-900" : "text-gray-300"}`}

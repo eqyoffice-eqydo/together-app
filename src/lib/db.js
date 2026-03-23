@@ -219,6 +219,102 @@ export function subscribeToMessages(groupId, onMessage) {
     .subscribe()
 }
 
+// ─── CHECKINS ────────────────────────────────────────────────────────────────
+
+export async function getAnswers(userId) {
+  const { data, error } = await supabase
+    .from('answers')
+    .select('answers')
+    .eq('user_id', userId)
+    .single()
+  if (error && error.code !== 'PGRST116') throw error
+  return data?.answers || null
+}
+
+export async function getThisWeekCheckin(userId) {
+  const weekStart = new Date()
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay())
+  weekStart.setHours(0, 0, 0, 0)
+  const { data, error } = await supabase
+    .from('checkins')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('created_at', weekStart.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+  if (error && error.code !== 'PGRST116') throw error
+  return data || null
+}
+
+export async function createCheckin(userId, { commitment, status, reflection }) {
+  const { data, error } = await supabase
+    .from('checkins')
+    .insert({ user_id: userId, commitment, status, reflection })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function getGroupFeed(groupId) {
+  const since = new Date()
+  since.setDate(since.getDate() - 14)
+
+  const { data: memberRows } = await supabase
+    .from('group_members')
+    .select('user_id')
+    .eq('group_id', groupId)
+  const memberIds = (memberRows || []).map((m) => m.user_id)
+
+  const [membersRes, projectsRes, eventsRes, checkinsRes] = await Promise.all([
+    supabase
+      .from('group_members')
+      .select('user_id, joined_at, profiles(display_name)')
+      .eq('group_id', groupId)
+      .gte('joined_at', since.toISOString())
+      .order('joined_at', { ascending: false })
+      .limit(10),
+    supabase
+      .from('projects')
+      .select('id, title, status, created_at, profiles(display_name)')
+      .eq('group_id', groupId)
+      .gte('created_at', since.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(10),
+    supabase
+      .from('events')
+      .select('id, title, location, event_date')
+      .eq('group_id', groupId)
+      .gte('event_date', new Date().toISOString())
+      .order('event_date', { ascending: true })
+      .limit(5),
+    memberIds.length > 0
+      ? supabase
+          .from('checkins')
+          .select('id, user_id, status, reflection, created_at, profiles(display_name)')
+          .in('user_id', memberIds)
+          .gte('created_at', since.toISOString())
+          .not('reflection', 'is', null)
+          .neq('reflection', '')
+          .order('created_at', { ascending: false })
+          .limit(10)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const items = []
+  for (const m of membersRes.data || [])
+    items.push({ type: 'member', date: m.joined_at, data: m })
+  for (const p of projectsRes.data || [])
+    items.push({ type: 'project', date: p.created_at, data: p })
+  for (const e of eventsRes.data || [])
+    items.push({ type: 'event', date: e.event_date, data: e })
+  for (const c of checkinsRes.data || [])
+    items.push({ type: 'checkin', date: c.created_at, data: c })
+
+  return items.sort((a, b) => new Date(b.date) - new Date(a.date))
+}
+
 // ─── INVITE & IMPACT ─────────────────────────────────────────────────────────
 
 export async function getProfile(userId) {
