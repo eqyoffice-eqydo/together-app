@@ -1,20 +1,21 @@
 import { useState, useEffect } from "react";
-import { getProfile, getInviteStats } from "../lib/db";
+import { getProfile, getInviteStats, getMyConnections } from "../lib/db";
 
 const APP_URL = window.location.origin;
 
 export default function Share({ user, onNext }) {
   const [copied, setCopied] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
-  const [stats, setStats] = useState({ invited: 0, joined: 0 });
+  const [stats, setStats] = useState({ invited: 0, joined: 0, connected: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.id) return;
-    Promise.all([getProfile(user.id), getInviteStats(user.id)])
-      .then(([profile, s]) => {
+    Promise.all([getProfile(user.id), getInviteStats(user.id), getMyConnections(user.id)])
+      .then(([profile, s, conns]) => {
         setInviteCode(profile.invite_code || "");
-        setStats(s);
+        const connected = conns.filter((c) => c.status === "accepted").length;
+        setStats({ ...s, connected });
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -113,7 +114,7 @@ export default function Share({ user, onNext }) {
         <div className="grid grid-cols-3 gap-3">
           {[
             { value: loading ? "—" : stats.invited, label: "Invited" },
-            { value: loading ? "—" : stats.invited, label: "Reached" },
+            { value: loading ? "—" : stats.connected, label: "Connected" },
             { value: loading ? "—" : stats.joined, label: "Joined" },
           ].map((stat) => (
             <div key={stat.label} className="border border-gray-100 rounded-xl py-4 flex flex-col items-center">

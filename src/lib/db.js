@@ -35,6 +35,14 @@ export async function updateProfile(userId, fields) {
   return data
 }
 
+export async function getTotalUserCount() {
+  const { count, error } = await supabase
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+  if (error) return 0
+  return count || 0
+}
+
 export async function getNearbyUsers(currentUserId) {
   const { data, error } = await supabase
     .from('profiles')

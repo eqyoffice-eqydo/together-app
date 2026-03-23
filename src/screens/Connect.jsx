@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getNearbyUsers, getDistanceKm, getMyConnections, sendConnectionRequest, acceptConnection } from "../lib/db";
+import { getNearbyUsers, getTotalUserCount, getDistanceKm, getMyConnections, sendConnectionRequest, acceptConnection } from "../lib/db";
 import { supabase } from "../lib/supabase";
 
 const filters = ["All", "Community", "Work", "Education", "Health", "Peace"];
@@ -46,6 +46,7 @@ export default function Connect({ user, onNext }) {
   const [myLocation, setMyLocation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(null); // id in curs de conectare
+  const [totalCount, setTotalCount] = useState(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -62,10 +63,12 @@ export default function Connect({ user, onNext }) {
           setMyLocation({ lat: myProfile.lat, lng: myProfile.lng });
         }
 
-        const [users, conns] = await Promise.all([
+        const [users, conns, count] = await Promise.all([
           getNearbyUsers(user.id),
           getMyConnections(user.id),
+          getTotalUserCount(),
         ]);
+        setTotalCount(count);
 
         setPeople(users);
         setConnections(conns);
@@ -305,13 +308,15 @@ export default function Connect({ user, onNext }) {
 
       {/* Global counter */}
       <div className="mx-8 mb-6 p-5 border border-gray-100 rounded-xl">
-        <p className="text-2xl font-bold text-gray-900 mb-0.5">14,302</p>
-        <p className="text-gray-400 text-sm mb-4">people in 47 countries. Growing every day.</p>
+        <p className="text-2xl font-bold text-gray-900 mb-0.5">
+          {totalCount !== null ? totalCount.toLocaleString() : "—"}
+        </p>
+        <p className="text-gray-400 text-sm mb-4">people and growing every day.</p>
         <button
           onClick={onNext}
           className="w-full bg-gray-900 hover:bg-gray-700 text-white font-medium text-sm py-3 rounded-xl transition-all"
         >
-          Start a local group
+          See my local group
         </button>
       </div>
 

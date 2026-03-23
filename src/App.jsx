@@ -64,7 +64,7 @@ export default function App() {
     }
   }
 
-  async function handleAuth(loggedInUser) {
+  async function handleAuth(loggedInUser, displayName) {
     setUser(loggedInUser);
 
     // Salveaza raspunsurile
@@ -89,6 +89,7 @@ export default function App() {
       const { lat, lng } = await getUserLocation();
 
       const profileUpdate = { lat, lng };
+      if (displayName) profileUpdate.display_name = displayName;
       if (userSelections?.topics?.length > 0) {
         profileUpdate.interests = userSelections.topics;
       }

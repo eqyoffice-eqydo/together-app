@@ -3,6 +3,7 @@ import { createUser, loginUser } from '../lib/db'
 
 export default function Auth({ onAuth }) {
   const [mode, setMode] = useState('login')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,11 +18,17 @@ export default function Auth({ onAuth }) {
 
     try {
       if (mode === 'register') {
+        if (name.trim()) {
+          localStorage.setItem(`together_name_${email}`, name.trim())
+        }
         await createUser(email, password)
-        setMessage('Check your email to confirm your account.')
+        setMessage('Check your email to confirm your account, then sign in below.')
+        setMode('login')
       } else {
         const data = await loginUser(email, password)
-        onAuth(data.user)
+        const savedName = localStorage.getItem(`together_name_${email}`) || ''
+        if (savedName) localStorage.removeItem(`together_name_${email}`)
+        onAuth(data.user, savedName)
       }
     } catch (err) {
       setError(err.message || 'Something went wrong.')
@@ -52,6 +59,22 @@ export default function Auth({ onAuth }) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {mode === 'register' && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                Your name
+              </label>
+              <input
+                type="text"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="How others will see you"
+                className="border border-gray-200 focus:border-gray-400 text-gray-900 text-sm placeholder-gray-300 rounded-xl px-4 py-3.5 outline-none transition-colors bg-white"
+              />
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">
               Email
