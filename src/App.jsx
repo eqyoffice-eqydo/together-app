@@ -44,6 +44,10 @@ export default function App() {
       setScreen("auth");
       return;
     }
+    if (SCREENS[idx + 1] === "connect" && user) {
+      setScreen("home");
+      return;
+    }
     if (idx < SCREENS.length - 1) {
       setScreen(SCREENS[idx + 1]);
     }
@@ -61,7 +65,7 @@ export default function App() {
       setScreen("auth");
     } else {
       saveAnswers(user.id, selectionsWithCommitment).catch(console.error);
-      setScreen("connect");
+      setScreen("home");
     }
   }
 
