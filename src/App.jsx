@@ -126,7 +126,7 @@ export default function App() {
   const showBottomNav = ["connect", "community", "share"].includes(screen);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col max-w-md mx-auto relative">
+    <div className="min-h-dvh bg-white flex flex-col w-full max-w-md mx-auto relative overflow-x-hidden">
 
       {user && showBottomNav && (
         <button
