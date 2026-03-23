@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getGroupMessages, sendMessage, subscribeToMessages } from "../lib/db";
+import { getGroupMessages, sendMessage, subscribeToMessages, getGroupProjects, getGroupEvents, createProject, createEvent } from "../lib/db";
 
 function getInitials(name) {
   if (!name) return "?";
@@ -13,53 +13,157 @@ function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-const projects = [
-  { id: 1, title: "Free skill-sharing circle", description: "Teaching each other what we know — free, open, weekly.", status: "active", members: 14 },
-  { id: 2, title: "Community garden", description: "Grow food together. Share the harvest. Build trust.", status: "planning", members: 7 },
-];
+function formatEventDate(dateStr) {
+  const d = new Date(dateStr);
+  return {
+    day: d.toLocaleDateString("en", { weekday: "short" }).toUpperCase(),
+    date: d.getDate(),
+    month: d.toLocaleDateString("en", { month: "short" }),
+    time: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+  };
+}
 
-const events = [
-  { id: 1, day: "TUE", date: "25", title: "Community Meetup", location: "Central Park", attendees: 23 },
-  { id: 2, day: "THU", date: "10", title: "Neighborhood Clean-up", location: "Riverside", attendees: 18 },
-];
+// Modal simplu pentru creare proiect
+function NewProjectModal({ onSave, onClose }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [status, setStatus] = useState("planning");
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50 px-4 pb-8">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6 flex flex-col gap-4">
+        <h2 className="text-lg font-bold text-gray-900">New Project</h2>
+        <input
+          type="text"
+          placeholder="Project title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400"
+        />
+        <textarea
+          placeholder="Short description..."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400 resize-none"
+        />
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-gray-400 bg-white"
+        >
+          <option value="planning">Planning</option>
+          <option value="active">Active</option>
+        </select>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-500 text-sm py-3 rounded-xl hover:border-gray-400 transition-all">Cancel</button>
+          <button
+            onClick={() => title.trim() && onSave({ title: title.trim(), description: description.trim(), status })}
+            disabled={!title.trim()}
+            className="flex-1 bg-gray-900 text-white text-sm py-3 rounded-xl disabled:opacity-30 hover:bg-gray-700 transition-all"
+          >
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal pentru creare eveniment
+function NewEventModal({ onSave, onClose }) {
+  const [title, setTitle] = useState("");
+  const [location, setLocation] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+
+  function handleSave() {
+    if (!title.trim() || !date || !time) return;
+    const event_date = new Date(`${date}T${time}`).toISOString();
+    onSave({ title: title.trim(), location: location.trim(), event_date });
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50 px-4 pb-8">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6 flex flex-col gap-4">
+        <h2 className="text-lg font-bold text-gray-900">New Event</h2>
+        <input
+          type="text"
+          placeholder="Event title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400"
+        />
+        <input
+          type="text"
+          placeholder="Location (optional)"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400"
+        />
+        <div className="flex gap-3">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-gray-400"
+          />
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-gray-400"
+          />
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-500 text-sm py-3 rounded-xl hover:border-gray-400 transition-all">Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={!title.trim() || !date || !time}
+            className="flex-1 bg-gray-900 text-white text-sm py-3 rounded-xl disabled:opacity-30 hover:bg-gray-700 transition-all"
+          >
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Community({ group, user, onNext }) {
   const [messages, setMessages] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [events, setEvents] = useState([]);
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [showNewEvent, setShowNewEvent] = useState(false);
   const bottomRef = useRef(null);
 
   useEffect(() => {
-    if (!group?.id) {
-      setLoading(false);
-      return;
-    }
+    if (!group?.id) { setLoading(false); return; }
 
-    // Incarca mesajele existente
-    getGroupMessages(group.id)
-      .then((msgs) => {
-        setMessages(msgs);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.all([
+      getGroupMessages(group.id),
+      getGroupProjects(group.id),
+      getGroupEvents(group.id),
+    ]).then(([msgs, projs, evts]) => {
+      setMessages(msgs);
+      setProjects(projs);
+      setEvents(evts);
+    }).catch(console.error).finally(() => setLoading(false));
 
-    // Subscribie real-time la mesaje noi
     const channel = subscribeToMessages(group.id, (newMsg) => {
       setMessages((prev) => {
-        // Evita duplicate daca mesajul e deja in lista (trimis de noi)
         if (prev.find((m) => m.id === newMsg.id)) return prev;
-        // newMsg din real-time nu are profiles joined — il adaugam simplu
         return [...prev, { ...newMsg, profiles: { display_name: null } }];
       });
     });
 
-    return () => {
-      channel.unsubscribe();
-    };
+    return () => { channel.unsubscribe(); };
   }, [group?.id]);
 
-  // Scroll la ultimul mesaj
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -67,27 +171,31 @@ export default function Community({ group, user, onNext }) {
   async function handleSend() {
     const text = messageText.trim();
     if (!text || !group?.id || !user?.id || sending) return;
-
     setSending(true);
     setMessageText("");
-
     try {
       const sent = await sendMessage(group.id, user.id, text);
-      // Adauga mesajul trimis direct (nu asteptam real-time)
       setMessages((prev) => [...prev, sent]);
     } catch (err) {
-      console.error("Failed to send message:", err);
-      setMessageText(text); // restaureaza textul daca a esuat
-    } finally {
-      setSending(false);
-    }
+      console.error(err);
+      setMessageText(text);
+    } finally { setSending(false); }
   }
 
-  function handleKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  async function handleNewProject(data) {
+    try {
+      const proj = await createProject(group.id, user.id, data);
+      setProjects((prev) => [proj, ...prev]);
+      setShowNewProject(false);
+    } catch (err) { console.error(err); }
+  }
+
+  async function handleNewEvent(data) {
+    try {
+      const evt = await createEvent(group.id, data);
+      setEvents((prev) => [...prev, evt].sort((a, b) => new Date(a.event_date) - new Date(b.event_date)));
+      setShowNewEvent(false);
+    } catch (err) { console.error(err); }
   }
 
   return (
@@ -96,26 +204,17 @@ export default function Community({ group, user, onNext }) {
       {/* Header */}
       <div className="px-8 pt-12 pb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-0.5">
-            {group?.name || "Your Local Group"}
-          </h1>
-          <p className="text-gray-400 text-sm">
-            {group ? `${group.member_count} member${group.member_count !== 1 ? "s" : ""}` : "Join a group to connect locally"}
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-0.5">{group?.name || "Your Local Group"}</h1>
+          <p className="text-gray-400 text-sm">{group ? `${group.member_count} member${group.member_count !== 1 ? "s" : ""}` : "No group yet"}</p>
         </div>
-        <button
-          onClick={onNext}
-          className="text-xs font-medium text-gray-900 border border-gray-200 px-3 py-1.5 rounded-lg hover:border-gray-400 transition-all mt-1"
-        >
+        <button onClick={onNext} className="text-xs font-medium text-gray-900 border border-gray-200 px-3 py-1.5 rounded-lg hover:border-gray-400 transition-all mt-1">
           + Invite
         </button>
       </div>
 
-      {/* No group state */}
       {!group && !loading && (
         <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
-          <p className="text-gray-400 text-sm mb-1">You're not in a local group yet.</p>
-          <p className="text-gray-300 text-xs">Make sure location access is enabled and log in again.</p>
+          <p className="text-gray-400 text-sm">You're not in a local group yet.</p>
         </div>
       )}
 
@@ -123,61 +222,72 @@ export default function Community({ group, user, onNext }) {
         <>
           {/* Projects */}
           <div className="px-8 mb-7">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Active Projects</p>
-            <div className="flex flex-col gap-3">
-              {projects.map((p) => (
-                <div key={p.id} className="border border-gray-100 rounded-xl p-4">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="text-gray-900 text-sm font-medium">{p.title}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${
-                      p.status === "active" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
-                    }`}>
-                      {p.status === "active" ? "Active" : "Planning"}
-                    </span>
-                  </div>
-                  <p className="text-gray-400 text-xs leading-relaxed mb-1">{p.description}</p>
-                  <p className="text-gray-300 text-xs">{p.members} members</p>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Active Projects</p>
+              <button onClick={() => setShowNewProject(true)} className="text-xs text-gray-500 hover:text-gray-900 transition-colors">+ New</button>
             </div>
+            {loading ? (
+              <div className="h-16 flex items-center justify-center">
+                <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-gray-900 animate-spin" />
+              </div>
+            ) : projects.length === 0 ? (
+              <button onClick={() => setShowNewProject(true)} className="w-full border border-dashed border-gray-200 rounded-xl py-5 text-gray-400 text-sm hover:border-gray-400 transition-all">
+                No projects yet. Start one.
+              </button>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {projects.map((p) => (
+                  <div key={p.id} className="border border-gray-100 rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-gray-900 text-sm font-medium">{p.title}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${p.status === "active" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>
+                        {p.status === "active" ? "Active" : "Planning"}
+                      </span>
+                    </div>
+                    {p.description && <p className="text-gray-400 text-xs leading-relaxed">{p.description}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Events */}
           <div className="px-8 mb-7">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Upcoming Events</p>
-            <div className="flex flex-col gap-3">
-              {events.map((e) => (
-                <div key={e.id} className="flex items-center gap-4 border border-gray-100 rounded-xl p-4">
-                  <div className="flex flex-col items-center w-8 flex-shrink-0">
-                    <span className="text-gray-400 text-xs font-medium">{e.day}</span>
-                    <span className="text-gray-900 text-lg font-bold leading-none">{e.date}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-gray-900 text-sm font-medium truncate">{e.title}</p>
-                    <p className="text-gray-400 text-xs">{e.location} · {e.attendees} going</p>
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Upcoming Events</p>
+              <button onClick={() => setShowNewEvent(true)} className="text-xs text-gray-500 hover:text-gray-900 transition-colors">+ New</button>
             </div>
+            {!loading && events.length === 0 ? (
+              <button onClick={() => setShowNewEvent(true)} className="w-full border border-dashed border-gray-200 rounded-xl py-5 text-gray-400 text-sm hover:border-gray-400 transition-all">
+                No events yet. Create one.
+              </button>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {events.map((e) => {
+                  const { day, date, time } = formatEventDate(e.event_date);
+                  return (
+                    <div key={e.id} className="flex items-center gap-4 border border-gray-100 rounded-xl p-4">
+                      <div className="flex flex-col items-center w-8 flex-shrink-0">
+                        <span className="text-gray-400 text-xs font-medium">{day}</span>
+                        <span className="text-gray-900 text-lg font-bold leading-none">{date}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-900 text-sm font-medium truncate">{e.title}</p>
+                        <p className="text-gray-400 text-xs">{e.location || "Location TBD"} · {time}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Chat */}
           <div className="px-8 mb-3">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Group Chat</p>
-
             <div className="border border-gray-100 rounded-xl p-4 flex flex-col gap-4 max-h-64 overflow-y-auto">
-              {loading && (
-                <div className="flex justify-center py-4">
-                  <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-gray-900 animate-spin" />
-                </div>
-              )}
-
-              {!loading && messages.length === 0 && (
-                <p className="text-gray-300 text-sm text-center py-4">
-                  No messages yet. Say something.
-                </p>
-              )}
-
+              {loading && <div className="flex justify-center py-4"><div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-gray-900 animate-spin" /></div>}
+              {!loading && messages.length === 0 && <p className="text-gray-300 text-sm text-center py-4">No messages yet. Say something.</p>}
               {messages.map((msg) => {
                 const isMe = msg.user_id === user?.id;
                 const name = msg.profiles?.display_name || "Someone";
@@ -187,12 +297,8 @@ export default function Community({ group, user, onNext }) {
                       {getInitials(name)}
                     </div>
                     <div className={`flex flex-col gap-0.5 max-w-[75%] ${isMe ? "items-end" : ""}`}>
-                      {!isMe && (
-                        <span className="text-gray-400 text-xs">{name}</span>
-                      )}
-                      <div className={`px-3 py-2 rounded-2xl text-sm ${
-                        isMe ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-800"
-                      }`}>
+                      {!isMe && <span className="text-gray-400 text-xs">{name}</span>}
+                      <div className={`px-3 py-2 rounded-2xl text-sm ${isMe ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-800"}`}>
                         {msg.text}
                       </div>
                       <span className="text-gray-300 text-xs">{formatTime(msg.created_at)}</span>
@@ -212,15 +318,11 @@ export default function Community({ group, user, onNext }) {
                 placeholder="Say something to the group..."
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
-                onKeyDown={handleKeyDown}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 disabled={sending}
-                className="flex-1 bg-gray-50 border border-gray-100 text-gray-800 text-sm placeholder-gray-400 rounded-xl px-4 py-3 outline-none focus:border-gray-300 transition-colors disabled:opacity-50"
+                className="flex-1 bg-gray-50 border border-gray-100 text-gray-800 text-sm placeholder-gray-400 rounded-xl px-4 py-3 outline-none focus:border-gray-300 transition-colors"
               />
-              <button
-                onClick={handleSend}
-                disabled={!messageText.trim() || sending}
-                className="bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white p-3 rounded-xl transition-all flex-shrink-0"
-              >
+              <button onClick={handleSend} disabled={!messageText.trim() || sending} className="bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white p-3 rounded-xl transition-all flex-shrink-0">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
@@ -229,6 +331,9 @@ export default function Community({ group, user, onNext }) {
           </div>
         </>
       )}
+
+      {showNewProject && <NewProjectModal onSave={handleNewProject} onClose={() => setShowNewProject(false)} />}
+      {showNewEvent && <NewEventModal onSave={handleNewEvent} onClose={() => setShowNewEvent(false)} />}
     </div>
   );
 }

@@ -132,6 +132,49 @@ export async function getUserGroup(userId) {
   return data?.groups || null
 }
 
+// ─── PROJECTS & EVENTS ───────────────────────────────────────────────────────
+
+export async function getGroupProjects(groupId) {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, title, description, status, created_at, profiles(display_name)')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+export async function createProject(groupId, userId, { title, description, status }) {
+  const { data, error } = await supabase
+    .from('projects')
+    .insert({ group_id: groupId, created_by: userId, title, description, status })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function getGroupEvents(groupId) {
+  const { data, error } = await supabase
+    .from('events')
+    .select('id, title, location, event_date, created_at')
+    .eq('group_id', groupId)
+    .gte('event_date', new Date().toISOString())
+    .order('event_date', { ascending: true })
+  if (error) throw error
+  return data || []
+}
+
+export async function createEvent(groupId, { title, location, event_date }) {
+  const { data, error } = await supabase
+    .from('events')
+    .insert({ group_id: groupId, title, location, event_date })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 // ─── MESSAGES ────────────────────────────────────────────────────────────────
 
 export async function getGroupMessages(groupId) {
